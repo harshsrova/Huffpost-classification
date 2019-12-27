@@ -1,0 +1,153 @@
+from google.colab import files
+import numpy as np
+np.random.seed(0)
+from keras.models import Model
+from keras.layers import Dense, Input, Dropout, LSTM, Activation
+from keras.layers.embeddings import Embedding
+from keras.preprocessing import sequence
+from keras.initializers import glorot_uniform
+np.random.seed(1)
+!pip install -q kaggle
+   
+   
+data = open("drive/Colab Notebooks/news_train.json","r")
+red = data.read()
+import json
+red = json.dumps(red)
+load = json.loads(red)
+load_data = load.split("\n")
+
+data = load_data[:]
+data_Len = len(data)
+print(len(data))
+loaddata = []
+for i in range(data_Len-1):
+   
+    a = json.loads(data[i])
+    temp = a["headline"] + ' ' + a["short_description"]
+    temp = temp.lower()
+    loaddata.append(temp)
+    a.clear()
+
+import string
+for i in range(data_Len-1):
+  loaddata[i] = loaddata[i].replace("-"," ")
+  loaddata[i] = loaddata[i].replace(","," ")
+  
+  loaddata[i] = loaddata[i].translate(str.maketrans('', '', string.punctuation))
+  loaddata[i] = loaddata[i].lower()
+load_labels = []
+for i in range(data_Len-1):
+   
+    a = json.loads(data[i])
+    temp = a["category"]
+    load_labels.append(temp)
+    a.clear()
+
+for i in range(len(load_labels)):
+  if(load_labels[i]=="PARENTING"):
+    load_labels[i]="PARENTS"
+  if(load_labels[i]=="ENVIRONMENT"):
+    load_labels[i]="GREEN" 
+  if(load_labels[i]=="THE WORLDPOST"):
+    load_labels[i]="WORLDPOST"
+    
+unique = np.unique(load_labels) 
+print(unique)
+
+labels = load_labels[:]
+unique = unique.tolist()
+for i in range(169999):
+   temp = unique.index(load_labels[i])
+   temp = temp+1
+   labels[i] = temp
+
+labels = np.asarray(labels) 
+
+apple = {}
+qp = enumerate(unique)
+print(len(labels))
+for i,j in qp:
+  apple[i+1]=j
+
+import string
+for i in range(data_Len-1):
+  load_data[i] = load_data[i].replace("-"," ")
+  load_data[i] = load_data[i].replace(","," ")
+  
+  load_data[i] = load_data[i].translate(str.maketrans('', '', string.punctuation))
+  load_data[i] = load_data[i].lower()
+
+from keras.preprocessing.text import Tokenizer
+# define 5 documents
+docs = loaddata[:]
+# create the tokenizer
+t = Tokenizer()
+# fit the tokenizer on the documents
+t.fit_on_texts(docs)
+# summarize what was learned
+print(t.word_counts)
+print(t.document_count)
+print(t.word_index)
+print(t.word_docs)
+
+
+from keras.preprocessing.sequence import pad_sequences
+post_seq = t.texts_to_sequences(docs)
+mylist = post_seq[:]
+maxlength =246
+post_seq_padded = pad_sequences(post_seq, maxlen=maxlength)
+
+vocabulary = len(t.word_index)
+vocabulary = vocabulary + 1
+
+import tensorflow as tf
+import keras
+Dropout = keras.layers.Dropout 
+inputs = Input(shape=(maxlength, ))
+embedding_layer = Embedding(vocabulary,
+                            16,input_length=246)(inputs)
+word_embedding= keras.layers.BatchNormalization()(embedding_layer)
+
+x = keras.layers.Bidirectional(LSTM(128))(word_embedding)
+
+x = Dense(64, activation='relu')(x)
+x = Dropout(0.2)(x)
+x = Dense(32, activation='relu')(x)
+predictions = Dense(39, activation='softmax')(x)
+model = Model(inputs=[inputs], outputs=predictions)
+model.compile(optimizer='adam',
+              loss='categorical_crossentropy',
+              metrics=['acc'])
+
+model.summary()
+
+yhat = tf.keras.utils.to_categorical(labels)
+
+history = model.fit(post_seq_padded, batch_size=148, y=yhat, verbose=1, validation_split=0.10, shuffle=True, epochs=20)
+
+model.save('2_model.h5') #where model is already trained
+from google.colab import files
+files.download("2_model.h5")
+// predicition from model trained above
+
+pred = model.predict(np.array(post_seq_padded))
+
+num = np.argmax(len(pred))
+ji = []
+for i in range(len(pred)):
+    
+    num = np.argmax(pred[i])
+    ji.append(num)
+s = '"",labels\n'
+for i, p in enumerate(ji):
+    
+        
+    s += '%f,%s\n' % (i,apple[p])
+        
+
+with open('nlp.csv', 'w') as f:
+    f.write(s)
+
+from google.colab import files
+files.download("nlp.csv")
